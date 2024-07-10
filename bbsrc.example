@@ -1,0 +1,42 @@
+[router]
+# The IP address, username and password used to access the router's web GUI.
+address=192.168.0.1
+username=user
+# password is optional in this file. If it's not specified here, it must be passed in via the
+# BBS_PASSWORD environment variable.
+password=xxxx
+
+
+[statistics]
+# file is the CSV file where the downloaded statistics are accumulated over time. This can
+# alternatively be specified using the --file command-line option, which takes precedence over the
+# value here. This value is optional if --file is used.
+file=temp.csv
+
+# tempfile is used to write a temporary CSV file during updates to avoid the risk of corrupting the
+# main file. It is optional; if not specified, tempfile defaults to file+"~".
+#
+# NB: tempfile must be on the same filesystem as file because an atomic rename operation is used as
+# part of the update code.
+#tempfile=xxxx
+
+# suppress_columns is an optional comma/newline separated list of statistics which should be omitted
+# from the output. If this is not specified everything supported by the code is included. I like to
+# suppress these raw values for the 4G connection because they are summarised in a human-readable
+# format by the 4g_connected_band column.
+suppress_columns=
+	lte_ca_pcell_band
+	lte_ca_pcell_bandwidth
+	lte_ca_scell_band
+	lte_ca_scell_bandwidth
+
+
+[tests]
+# List of URLs to use for download speed tests. This is optional if you don't use the --download or
+# --probabilistic-download options. If there is more than one URL listed, one will be picked at
+# random whenever performing a download speed test. You can use any large file which can be accessed
+# without needing to log in to download it.
+testurls = 
+    http://212.183.159.230/50MB.zip # https://www.buildsometech.com/download-test-files/
+    http://ipv4.download.thinkbroadband.com/50MB.zip # https://www.thinkbroadband.com/download
+    http://hil-speed.hetzner.com/100MB.bin # https://www.thinkbroadband.com/download
