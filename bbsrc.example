@@ -39,4 +39,4 @@ suppress_columns=
 testurls = 
     http://212.183.159.230/50MB.zip # https://www.buildsometech.com/download-test-files/
     http://ipv4.download.thinkbroadband.com/50MB.zip # https://www.thinkbroadband.com/download
-    http://hil-speed.hetzner.com/100MB.bin # https://www.thinkbroadband.com/download
+    http://hil-speed.hetzner.com/100MB.bin # http://hil-speed.hetzner.com/
