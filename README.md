@@ -18,7 +18,7 @@ There is an [example configuration file](bbsrc.example) which also contains some
 
 If you want the code to perform a test download to check your connection speed, add "--download". If you want the code to decide at random whether to perform a test download, add "--download-probability p" where p is a probability in the range 0-100. (p can optionally be followed by a "%" symbol, but it is always interpreted as a percentage probability whether the "%" symbol is present or not.)
 
-I have this set up to run from a cron job every 15 minutes using "--download-probability 1". This gives me roughly one download test a day so I have some historical data to look back on if my connection seems to be developing problems, without using up too much of my own or the test sites' bandwidth.
+I have this set up to run from a cron job every 15 minutes using "--download-probability 1 --polite". This gives me roughly one download test a day so I have some historical data to look back on if my connection seems to be developing problems, without using up too much of my own or the test sites' bandwidth. --polite tries to avoid kicking me out of the router's web GUI if I am using it myself in a browser.
 
 ## Possible problems
 

@@ -83,6 +83,8 @@ parser.add_argument("-f", "--file", metavar="FILE", help="specify statistics CSV
 parser.add_argument("-d", "--download", action="store_true", help="perform a test download")
 parser.add_argument("-p", "--download-probability", metavar="P",
                     help="perform a test download with probability P%%")
+parser.add_argument("--polite", action="store_true",
+                    help="try to avoid disconnecting existing router GUI sessions")
 cmd_args = parser.parse_args()
 config_file = default_config_file if cmd_args.config is None else cmd_args.config
 
@@ -186,12 +188,31 @@ if cmd_args.download:
 # succeeded and raising an exception if not.
 #
 # addr should be the IP address of the router.
-def start_session(addr, user, password):
+def start_session(addr, user, password, polite=False):
     session = requests.Session()
     session.headers.update({
             "Referer": "http://%s/" % addr,
             "Host": addr
     })
+
+    # Only one user is allowed to be connected to the router's web GUI at a time, so if someone else
+    # is already connected (most likely the user in a web browser), we will forcibly disconnect them
+    # if we connect. In polite mode we try to fail rather than kick other users out. I haven't been
+    # able to find a way to do this reliably, but login_lock_time decreases from 300 (seconds) to
+    # -1 after someone logs in. (Logging out does not affect this.) If we only authenticate when
+    # this is negative, we therefore shouldn't kick anyone out until they have been logged in for
+    # 300 seconds. Our own logins count, of course, so polite mode cannot be used if you want to
+    # log more frequently than every 300ish seconds.
+    if polite:
+        params_response = session.get("http://%s/goform/goform_get_cmd_process" % addr, params={
+            "isTest": "false",
+            "multi_data": "1",
+            "cmd": "login_lock_time",
+        })
+        params_response.raise_for_status()
+        login_lock_time = params_response.json().get("login_lock_time")
+        if login_lock_time is not None and int(login_lock_time) > 0:
+            raise RuntimeError("Another login happened recently, not connecting")
 
     # Get the router's challenge.
     now = int(time.time() * 1000)
@@ -612,7 +633,8 @@ class CsvUpdater:
 
 try:
     # Actually get the statistics from the router.
-    session = start_session(config.router_address, config.router_username, config.router_password)
+    session = start_session(config.router_address, config.router_username, config.router_password,
+                            cmd_args.polite)
     simple_statistics = get_parsed_router_values(session, statistics_list)
 
     # Do any test download after obtaining the other data correctly, so if that fails for some
