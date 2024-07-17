@@ -20,6 +20,16 @@
 # OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+# In general I've tried to follow the principle here that this program is recording transient data
+# and the important thing is to get it logged with as little processing as possible. Any quirks in
+# the data can be fixed up later and it's better not to bake possibly misguided workarounds into the
+# source data.
+#
+# On the other hand, it is also nice to be able to open the resulting log in a spreadsheet and
+# examine it without needing further post-processing. This is why some basic conversions are done
+# here, notably converting bytes to larger units.
+
+
 # I didn't want to split this into modules to make it easy to run without fiddling with PYTHONPATH,
 # so "# === blah" comments indicate groups of related bits of code.
 #

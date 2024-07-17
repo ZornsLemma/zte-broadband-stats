@@ -27,3 +27,7 @@ I have data use tracking enabled in the router's web GUI. If you don't have this
 ## Adding more statistics
 
 You can use the developer tools in a web browser to watch the network requests and responses made while you're logged in to the router's web GUI. Looking at the JSON responses should allow you to identify the internal name for the statistic you're interested in, and you can then add a corresponding entry in the statistics_list in the code.
+
+## Credits and thanks
+
+I wrote the original version of this from scratch, but subsequently discovered [zte.js](https://gist.github.com/tpoechtrager/766140c49a711a2177820ea42556de3c/) and looking over its code has been helpful in understanding how to interpret some of the router statistics.
