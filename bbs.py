@@ -59,6 +59,7 @@ import time
 
 megabyte = 1024 * 1024
 gigabyte = megabyte * 1024
+megabit = megabyte / 8
 
 def die(s):
     print(s, file=sys.stderr)
@@ -371,7 +372,7 @@ def get_parsed_router_values(session, statistic_list):
     parsed_router_values = {}
     single_router_keys = set()
     for statistic in statistic_list:
-        if len(statistic.router_keys) == 1:
+        if not isinstance(statistic, DerivedStatistic): # TODO: UNSATISFACTORY?
             router_key = statistic.router_keys[0]
             if router_key in single_router_keys:
                 die("Router key '%s' is used by more than one simple statistic" % router_key)
@@ -407,6 +408,7 @@ def derive_4g_connected_band(self, simple_statistics):
         # TODO: I'm not sure how the router web interface would handle the ones
         # with suffixes like SDL, but this will do for now.
         band_frequency = {
+            "28": "AC700",
             "20": "800",
              "8": "900",
             "32": "1400SDL",
@@ -415,7 +417,7 @@ def derive_4g_connected_band(self, simple_statistics):
             "40": "2300",
              "7": "2600FDD",
             "38": "2600TDD",
-            "42": "3400"
+            "42": "3400",
         }.get(band, "???")
         return "%sMHz@%s(B%s)" % (bandwidth, band_frequency, band)
 
@@ -423,21 +425,30 @@ def derive_4g_connected_band(self, simple_statistics):
         value = simple_statistics.get(key)
         return None if value is None else fmt % value
 
-    result = ""
+    bands = []
 
-    primary_bandwidth = get_helper("lte_ca_pcell_bandwidth", "%.1f")
     primary_band = get_helper("lte_ca_pcell_band", "%d")
+    primary_bandwidth = get_helper("lte_ca_pcell_bandwidth", "%.1f")
     if primary_band is not None and primary_bandwidth is not None:
-        result += format_helper(primary_bandwidth, primary_band)
+        bands.append((primary_band, primary_bandwidth))
 
-    # TODO: I don't know if we can have a secondary without a primary; if we do, we'll
-    # semi-deliberately indicate that via a mangled format starting with a "+".
-    secondary_bandwidth = get_helper("lte_ca_scell_bandwidth", "%.1f")
-    secondary_band = get_helper("lte_ca_scell_band", "%d")
-    if secondary_band is not None and secondary_bandwidth is not None:
-        result += " + " + format_helper(secondary_bandwidth, secondary_band)
+    multi = simple_statistics["lte_multi_ca_scell_info"]
+    if multi is not None:
+        for cell_info in multi.split(";"):
+            try:
+                s = cell_info.split(",")
+                if len(s) >= 6:
+                    # We have 1-based index, PCI, unknown, band number, EARFCN, bandwidth.
+                    bands.append((s[3], s[5]))
+            except ValueError as e:
+                log_exception(e) # TODO TEST
 
-    return result
+    return " + ".join(format_helper(bandwidth, band) for (band, bandwidth) in bands)
+
+
+def derive_enb_id(self, simple_statistics):
+    cell_id = simple_statistics["cell_id"]
+    return None if cell_id is None else int(cell_id) >> 8
 
 
 def get_test_download_values():
@@ -455,7 +466,7 @@ def get_test_download_values():
         test_download_time = max(test_download_end - test_download_start, 0.001)
         result["test_download_size_mb"] = test_download_size / megabyte
         result["test_download_time"] = test_download_time
-        result["test_download_rate"] = (test_download_size / megabyte) / test_download_time
+        result["test_download_rate_mbit"] = (test_download_size / megabit) / test_download_time
     except requests.exceptions.RequestException as e:
         log_exception(e)
     return result
@@ -490,34 +501,60 @@ statistics_list = [
     DecimalStatistic("monthly_rx_bytes", "Monthly Data Rx (GB)", csv_key="monthly_rx_gb",
                      divisor=gigabyte, fmt="%.6f"),
     DecimalStatistic("realtime_time", "Connection Uptime (s)"),
+    DecimalStatistic("realtime_tx_bytes", "Connection Tx (GB)", csv_key="realtime_tx_gb",
+                     divisor=gigabyte, fmt="%.6f"),
+    DecimalStatistic("realtime_rx_bytes", "Connection Rx (GB)", csv_key="realtime_rx_gb",
+                     divisor=gigabyte, fmt="%.6f"),
+    DecimalStatistic("realtime_tx_thrpt", "Instantaneous Tx Rate (Mbit/s)",
+                     csv_key="realtime_tx_thrpt_mbit", divisor=megabit, fmt="%.3f"),
+    DecimalStatistic("realtime_rx_thrpt", "Instantaneous Rx Rate (Mbit/s)",
+                     csv_key="realtime_rx_thrpt_mbit", divisor=megabit, fmt="%.3f"),
+
+    StringStatistic("network_type", "Network Type"),
 
     # Network Information (4G)
-    DecimalStatistic("wan_active_channel", "4G Frequency"),
+    DecimalStatistic("lte_pci_lock", "TODO"),
+    DecimalStatistic("lte_earfcn_lock", "TODO"),
+    StringStatistic("lte_band_lock", "TODO"),
+    DecimalStatistic("lte_freq_lock", "TODO"),
+    HexStatistic("lte_pci", "4G PCI"),
+    DecimalStatistic("wan_active_channel", "4G Frequency (EARFCN)"),
+    HexStatistic("cell_id", "4G Cell ID"),
+    DerivedStatistic("enb_id", ["cell_id"], "eNB ID", derive_enb_id),
     DerivedStatistic(
         "4g_connected_band",
-        [
-            "lte_ca_pcell_band", "lte_ca_pcell_bandwidth", "lte_ca_scell_band",
-            "lte_ca_scell_bandwidth"
-        ],
+        ["lte_ca_pcell_band", "lte_ca_pcell_bandwidth", "lte_multi_ca_scell_info"],
         "4G Connected Band", derive_4g_connected_band),
     DecimalStatistic("lte_ca_pcell_band", "4G Connected Band, Primary"),
     DecimalStatistic("lte_ca_pcell_bandwidth", "4G Connected Band, Primary Bandwidth (MHz)"),
     DecimalStatistic("lte_ca_scell_band", "4G Connected Band, Secondary"),
     DecimalStatistic("lte_ca_scell_bandwidth", "4G Connected Band, Secondary Bandwidth (MHz)"),
-    DecimalStatistic("lte_rsrp", "4G Signal Strength (dBm)"),
+    StringStatistic("lte_multi_ca_scell_info", "4G Non-Primary Connected Bands"),
+    DecimalStatistic("lte_rsrp", "4G RSRP (dBm)"),
+    DecimalStatistic("lte_rsrq", "4G RSRQ (dB)"),
     DecimalStatistic("lte_snr", "4G ECIO/SINR (dB)"),
-    HexStatistic("lte_pci", "4G PCI"),
-    HexStatistic("cell_id", "4G Cell ID"),
+    StringStatistic("lte_multi_ca_scell_sig_info", "TODO"),
+    # TODO: EXPERIMENTAL - CA CAN USE MORE THAN TWO BANDS AND I THINK THIS IS HOW IT'S REPORTED. I won't write code to parse this here yet, but I think it is semicolon delimited, and it does not include the primary cell. Each semicolon-delimited chunk seems to have six values, I suspect they are 1-based index,PCI?,something,band number,wan_active_channel,bandwidth_mhz (zte.js comment agrees, though it calls what I've called wan_active_channel earfcn which is probably the same but a more useful term, maybe)
 
     # Network Information (5G)
-    DecimalStatistic("nr5g_action_channel", "5G Frequency"),
-    StringStatistic("nr5g_action_band", "5G Connected Band"),
-    DecimalStatistic("Z5g_rsrp", "5G Signal Strength (dBm)"),
-    DecimalStatistic("Z5g_SINR", "5G SINR (dB)"),
+    StringStatistic("nr5g_cell_lock", "TODO"),
+    StringStatistic("nr5g_sa_band_lock", "TODO"),
+    StringStatistic("nr5g_nsa_band_lock", "TODO"),
     HexStatistic("nr5g_pci", "5G PCI"),
+    DecimalStatistic("nr5g_action_channel", "5G Frequency (ARFCN)"),
     # TODO: Z5g_CELL_ID is always empty and the corresponding item shown in the router web GUI seems
-    # to be empty too. Get rid of this or comment it out?
+    # to be empty too. I suspect it might show something with 5G SA instead of 5G NSA, but I don't
+    # know - still, best to keep it around for now.
     DecimalStatistic("Z5g_CELL_ID", "5G (SA) Cell ID"),
+    StringStatistic("nr5g_cell_id", "TODO"),
+    StringStatistic("nr5g_action_band", "5G Connected Band"),
+    DecimalStatistic("nr5g_action_nsa_band", "TODO"),
+    StringStatistic("nr_ca_pcell_band", "TODO"),
+    StringStatistic("nr_ca_pcell_freq", "TODO"),
+    StringStatistic("nr_multi_ca_scell_info", "TODO"),
+    DecimalStatistic("Z5g_rsrp", "5G RSRP (dBm)"),
+    DecimalStatistic("Z5g_rsrq", "5G RSRQ (dB)"),
+    DecimalStatistic("Z5g_SINR", "5G SINR (dB)"),
 
     # TODO: Due to the slightly inelegant way the test download statistics are handled, divisor
     # other than 1 and auto-derivation of fmt doesn't work here. It's probably cleaner without them,
@@ -528,7 +565,7 @@ statistics_list = [
     # TODO: We could implement the download rate as a DerivedStatistic, but it's probably more
     # trouble than it's worth - we'd need to declare its dependency on the above statistics, but
     # avoid trying to fetch them from the router.
-    DecimalStatistic("test_download_rate", "Test Download Rate (MB/s)", fmt="%.3f"),
+    DecimalStatistic("test_download_rate_mbit", "Test Download Rate (Mbit/s)", fmt="%.3f"),
 ]
 
 for csv_key in config.suppressed_csv_keys:
@@ -669,3 +706,7 @@ except RuntimeError as e:
 # data use correctly. To be fair, I'd expect the router to get this right given users will rely on
 # it to avoid going over their data allowance, but it might be interesting to have something to
 # cross-reference the router stats with.
+
+# TODO: There is a check_web_conflict return value - is it possible we can check this before logging on and use it to avoid disconnecting an ongoing user session? If so that would allow us to potentially log a lot more frequently.
+
+# TODO: Add (LTE) eNB column (cell_id >> 8)? This is derived information but it is simple, it would be an extra column and it does make standalone analysis of the resulting CSV file easier.

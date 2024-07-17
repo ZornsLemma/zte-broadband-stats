@@ -21,14 +21,12 @@ file=temp.csv
 #tempfile=xxxx
 
 # suppress_columns is an optional comma/newline separated list of statistics which should be omitted
-# from the output. If this is not specified everything supported by the code is included. I like to
-# suppress these raw values for the 4G connection because they are summarised in a human-readable
-# format by the 4g_connected_band column.
-suppress_columns=
-	lte_ca_pcell_band
-	lte_ca_pcell_bandwidth
-	lte_ca_scell_band
-	lte_ca_scell_bandwidth
+# from the output. If this is not specified everything supported by the code is included.
+#suppress_columns=
+#	lte_ca_pcell_band
+#	lte_ca_pcell_bandwidth
+#	lte_ca_scell_band
+#	lte_ca_scell_bandwidth
 
 
 [tests]
